@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
@@ -19,8 +20,18 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="URL Shortener")
 
 
+class StatusResponse(BaseModel):
+    status: str
+    service: str
+
+
 def _generate_code(length: int = 6) -> str:
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
+
+@app.get("/status", response_model=StatusResponse)
+def get_status():
+    return StatusResponse(status="ok", service="url-shortener")
 
 
 @app.post("/shorten", response_model=URLResponse, status_code=201)
