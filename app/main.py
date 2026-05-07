@@ -2,14 +2,17 @@ import logging
 import random
 import string
 from datetime import datetime, timedelta
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import get_optional_current_user
 from app.database import Base, engine, get_db
 from app.models import URL
+from app.routers import auth, my_urls
 from app.schemas import URLCreate, URLResponse
 
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +21,9 @@ logger = logging.getLogger(__name__)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="URL Shortener")
+
+app.include_router(auth.router)
+app.include_router(my_urls.router)
 
 
 class StatusResponse(BaseModel):
@@ -35,7 +41,11 @@ def get_status():
 
 
 @app.post("/shorten", response_model=URLResponse, status_code=201)
-def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
+def shorten_url(
+    payload: URLCreate,
+    db: Session = Depends(get_db),
+    user_id: Optional[int] = Depends(get_optional_current_user),
+):
     expires_at = None
     if payload.expires_in_hours is not None:
         expires_at = datetime.utcnow() + timedelta(hours=payload.expires_in_hours)
@@ -51,6 +61,7 @@ def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
         original_url=str(payload.original_url),
         short_code=code,
         expires_at=expires_at,
+        user_id=user_id,
     )
     db.add(url_obj)
     db.commit()

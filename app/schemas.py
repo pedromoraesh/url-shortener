@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, EmailStr, HttpUrl
 
 
 class URLCreate(BaseModel):
@@ -13,5 +13,23 @@ class URLResponse(BaseModel):
     original_url: str
     created_at: datetime
     expires_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UrlItem(BaseModel):
+    short_code: str
+    original_url: str
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
