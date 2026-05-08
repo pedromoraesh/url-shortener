@@ -118,3 +118,35 @@ class TestRedirectRateLimit:
                 return
 
         pytest.fail("Rate limit of 60 was not reached in 61 requests — check limiter config")
+
+
+class TestRetryAfterPositiveInteger:
+    """Retry-After deve ser um número inteiro positivo em segundos"""
+
+    def test_retry_after_is_positive_integer_shorten(self):
+        client = TestClient(app)
+        for i in range(10):
+            client.post("/shorten", json={"original_url": f"https://example{i}.com"})
+
+        response = client.post("/shorten", json={"original_url": "https://overflow.com"})
+        assert response.status_code == 429
+        retry_after = response.headers.get("Retry-After")
+        assert retry_after is not None, "Retry-After header must be present on 429"
+        assert retry_after.isdigit(), f"Retry-After must be a digit string, got: {retry_after!r}"
+        assert int(retry_after) > 0, f"Retry-After must be a positive integer, got: {retry_after}"
+
+    def test_retry_after_is_positive_integer_redirect(self):
+        client = TestClient(app)
+        create_resp = client.post("/shorten", json={"original_url": "https://example.com"})
+        assert create_resp.status_code == 201
+        code = create_resp.json()["short_code"]
+
+        for _ in range(60):
+            client.get(f"/{code}", follow_redirects=False)
+
+        response = client.get(f"/{code}", follow_redirects=False)
+        assert response.status_code == 429
+        retry_after = response.headers.get("Retry-After")
+        assert retry_after is not None, "Retry-After header must be present on 429"
+        assert retry_after.isdigit(), f"Retry-After must be a digit string, got: {retry_after!r}"
+        assert int(retry_after) > 0, f"Retry-After must be a positive integer, got: {retry_after}"
