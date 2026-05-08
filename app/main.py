@@ -51,6 +51,7 @@ def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
         original_url=str(payload.original_url),
         short_code=code,
         expires_at=expires_at,
+        max_redirects=payload.max_redirects,
     )
     db.add(url_obj)
     db.commit()
@@ -69,4 +70,6 @@ def redirect_url(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=410, detail="URL has expired")
 
     logger.info({"event": "url_redirected", "code": code})
-    return RedirectResponse(url=url_obj.original_url, status_code=302)
+    response = RedirectResponse(url=url_obj.original_url, status_code=302)
+    response.headers["X-Redirect-Count"] = "1"
+    return response
