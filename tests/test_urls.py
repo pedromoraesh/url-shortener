@@ -94,3 +94,31 @@ def test_redirect_not_yet_expired():
 
     resp = client.get("/future", follow_redirects=False)
     assert resp.status_code == 302
+
+
+def test_redirect_has_x_redirect_count_header():
+    resp = client.post("/shorten", json={"original_url": "https://example.com"})
+    assert resp.status_code == 201
+    code = resp.json()["short_code"]
+
+    redirect_resp = client.get(f"/{code}", follow_redirects=False)
+    assert "x-redirect-count" in redirect_resp.headers
+
+
+def test_redirect_x_redirect_count_is_1():
+    resp = client.post("/shorten", json={"original_url": "https://example.com"})
+    assert resp.status_code == 201
+    code = resp.json()["short_code"]
+
+    redirect_resp = client.get(f"/{code}", follow_redirects=False)
+    assert redirect_resp.headers["x-redirect-count"] == "1"
+
+
+def test_shorten_accepts_max_redirects():
+    resp = client.post("/shorten", json={"original_url": "https://example.com", "max_redirects": 5})
+    assert resp.status_code == 201
+
+
+def test_shorten_works_without_max_redirects():
+    resp = client.post("/shorten", json={"original_url": "https://example.com"})
+    assert resp.status_code == 201

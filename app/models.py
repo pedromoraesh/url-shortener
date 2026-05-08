@@ -11,3 +11,4 @@ class URL(Base):
     short_code = Column(String, unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at = Column(DateTime, nullable=True, default=None)
+    max_redirects = Column(Integer, default=1, nullable=False)

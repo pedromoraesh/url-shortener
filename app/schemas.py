@@ -6,6 +6,7 @@ from pydantic import BaseModel, HttpUrl
 class URLCreate(BaseModel):
     original_url: HttpUrl
     expires_in_hours: Optional[int] = None
+    max_redirects: Optional[int] = 1
 
 
 class URLResponse(BaseModel):
