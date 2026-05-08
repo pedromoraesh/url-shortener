@@ -25,8 +25,17 @@ class StatusResponse(BaseModel):
     service: str
 
 
+class PingResponse(BaseModel):
+    status: str
+
+
 def _generate_code(length: int = 6) -> str:
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
+
+@app.get("/ping", response_model=PingResponse)
+def ping():
+    return PingResponse(status="ok")
 
 
 @app.get("/status", response_model=StatusResponse)
