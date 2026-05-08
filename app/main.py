@@ -8,6 +8,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.cache import url_cache
 from app.database import Base, engine, get_db
 from app.models import URL
 from app.schemas import URLCreate, URLResponse
@@ -61,6 +62,12 @@ def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
 
 @app.get("/{code}")
 def redirect_url(code: str, db: Session = Depends(get_db)):
+    cached_url = url_cache.get(code)
+    if cached_url:
+        response = RedirectResponse(url=cached_url, status_code=302)
+        response.headers["X-Cache"] = "HIT"
+        return response
+
     url_obj = db.query(URL).filter(URL.short_code == code).first()
     if not url_obj:
         raise HTTPException(status_code=404, detail="URL not found")
@@ -69,4 +76,7 @@ def redirect_url(code: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=410, detail="URL has expired")
 
     logger.info({"event": "url_redirected", "code": code})
-    return RedirectResponse(url=url_obj.original_url, status_code=302)
+    url_cache.set(code, url_obj.original_url)
+    response = RedirectResponse(url=url_obj.original_url, status_code=302)
+    response.headers["X-Cache"] = "MISS"
+    return response

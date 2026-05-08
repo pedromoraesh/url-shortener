@@ -94,3 +94,52 @@ def test_redirect_not_yet_expired():
 
     resp = client.get("/future", follow_redirects=False)
     assert resp.status_code == 302
+
+
+# --- Cache tests ---
+
+from app.cache import url_cache
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    url_cache.clear()
+    yield
+    url_cache.clear()
+
+
+@pytest.fixture
+def existing_url():
+    from app.models import URL
+    db = TestingSession()
+    url_obj = URL(
+        original_url="https://example.com",
+        short_code="testcode",
+        created_at=datetime.utcnow(),
+    )
+    db.add(url_obj)
+    db.commit()
+    db.close()
+
+
+def test_first_request_returns_cache_miss(existing_url):
+    response = client.get("/testcode", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers.get("X-Cache") == "MISS"
+
+
+def test_second_request_returns_cache_hit(existing_url):
+    client.get("/testcode", follow_redirects=False)
+    response = client.get("/testcode", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers.get("X-Cache") == "HIT"
+
+
+def test_cache_miss_after_ttl_expiry(existing_url):
+    import time as time_module
+    from unittest.mock import patch
+    client.get("/testcode", follow_redirects=False)
+    with patch("app.cache.time.time", return_value=time_module.time() + 61):
+        response = client.get("/testcode", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers.get("X-Cache") == "MISS"
