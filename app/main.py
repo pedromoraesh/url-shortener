@@ -3,9 +3,12 @@ import random
 import string
 from datetime import datetime, timedelta
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from app.database import Base, engine, get_db
@@ -17,7 +20,25 @@ logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="URL Shortener")
+app.state.limiter = limiter
+
+
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    try:
+        retry_after = str(exc.limit.limit.GRANULARITY.seconds)
+    except AttributeError:
+        retry_after = "60"
+    response = JSONResponse(
+        status_code=429,
+        content={"error": "Too Many Requests", "detail": exc.detail},
+    )
+    response.headers["Retry-After"] = retry_after
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 
 
 class StatusResponse(BaseModel):
@@ -35,7 +56,8 @@ def get_status():
 
 
 @app.post("/shorten", response_model=URLResponse, status_code=201)
-def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def shorten_url(request: Request, payload: URLCreate, db: Session = Depends(get_db)):
     expires_at = None
     if payload.expires_in_hours is not None:
         expires_at = datetime.utcnow() + timedelta(hours=payload.expires_in_hours)
@@ -60,7 +82,8 @@ def shorten_url(payload: URLCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/{code}")
-def redirect_url(code: str, db: Session = Depends(get_db)):
+@limiter.limit("60/minute")
+def redirect_url(request: Request, code: str, db: Session = Depends(get_db)):
     url_obj = db.query(URL).filter(URL.short_code == code).first()
     if not url_obj:
         raise HTTPException(status_code=404, detail="URL not found")
